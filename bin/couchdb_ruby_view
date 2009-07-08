@@ -1,95 +1,119 @@
-#!/usr/bin/env ruby -wKU
+#!/usr/bin/ruby -wKU
 
+#begin
 require 'rubygems'
 require 'json'
 
 # Highly experimental view requestor for CouchDb
 # 
-# >> pp db.post("_temp_view", "proc{|doc| if doc['foo'] =~ /ba/; return [null, doc];end  }")
-# #<CouchObject::Response:0x616944
-#  @parsed_body=
-#   {"rows"=>
-#     [{"_rev"=>928806717,
-#       "_id"=>"28D568C5992CBD2B4711F57225A19517",
-#       "value"=>
-#        {"_id"=>"28D568C5992CBD2B4711F57225A19517",
-#         "_rev"=>928806717,
-#         "foo"=>"baz"}},
-#      {"_rev"=>-1696868121,
-#       "_id"=>"601D858DB2E298EFC4BBA92A11760D1E",
-#       "value"=>
-#        {"_id"=>"601D858DB2E298EFC4BBA92A11760D1E",
-#         "_rev"=>-1696868121,
-#         "foo"=>"bar"}},
-#      {"_rev"=>-2093091288,
-#       "_id"=>"CABCEB3F2C8B70B3FE24A03FF6AB7A1E",
-#       "value"=>
-#        {"_id"=>"CABCEB3F2C8B70B3FE24A03FF6AB7A1E",
-#         "_rev"=>-2093091288,
-#         "foo"=>"bar"}}],
-#    "offset"=>0,
-#    "total_rows"=>3,
-#    "view"=>"_temp_view:proc{|doc| if doc['foo'] =~ /ba/; return [null,doc];end  }"},
-#  @response=#<Net::HTTPOK 200 OK readbody=true>>
+# >> pp RestClient.post("http://127.0.0.1:5984/db/_temp_view", {
+#      "language"=>"ruby",
+#      "map"=>"proc{|doc| if doc['foo'] =~ /ba/; emit(nil, doc); end}"
+#    }.to_json)
+#
+# Implements subset of protocol described at
+# http://wiki.apache.org/couchdb/View_server
 
-$callables = []
-$map_results = []
+map_results = []
 
 # used within the provided proc to add keys/values to the resulting view
-def map(key, value)
-  unless key.nil? && value.nil?
-    $map_results.push([key, value])
+class << self; self; end.class_eval do
+  define_method(:emit) do |key,value|
+    map_results.push [key,value]
   end
 end
 
-def return_error(label, reason)
-  error = { 'error' => { 'id' => label, 'reason' => reason } }
-  puts JSON.unparse(error)
+# used within the provided proc to perform logging
+def log(message)
+  respond(["log", message])
+end
+
+def respond(obj)
+  puts JSON.unparse(obj)
+rescue => e
+  puts JSON.unparse(["log", "Error converting object to JSON: #{e}"])
+ensure
   STDOUT.flush
 end
 
+def respond_error(error, reason)
+  respond('error' => error, 'reason' => reason)
+end
+
+def run_reduce(srcs, ks, vs, rereduce, b)
+  fns = srcs.collect { |src|
+    begin
+      fn = eval(src, b, "reduce", 1)
+      raise "expression must respond_to #call" unless fn.respond_to?(:call)
+      fn
+    rescue StandardError, SyntaxError => e
+      respond_error "reduce_compilation_error", "#{e}"
+      return
+    end
+  }
+  reductions = fns.collect { |fn|
+    begin
+      fn.call(ks, vs, rereduce)
+    rescue => e
+      log "function raised exception (#{e})"
+      nil
+    end
+  }
+  respond [true, reductions]
+end
+
+callables = []
 while cmd = ARGF.gets
   #$stderr.puts "@@@==> got: #{cmd.inspect}"
   cmd = JSON.parse(cmd)
   case cmd[0]
   when "reset"
-    $callables = []
-    puts "true"
-    STDOUT.flush
+    callables = []
+    respond(true)
   when "add_fun"
     # second arg is a string that will compile to a function
     begin
-      callable = eval(cmd[1])
-    rescue => e
-      return_error('map_compilation_error', "expression not evalable: #{e}")
-      exit(1)
-    end
-    
-    if callable.respond_to?(:call)
-      $callables << callable
-      puts "true"
-      STDOUT.flush
+      fn = eval(cmd[1], binding, "map", 1)
+      raise "expression must respond_to #call" unless fn.respond_to?(:call)
+    rescue StandardError, SyntaxError => e
+      respond_error('map_compilation_error', "#{e}")
     else
-      return_error('map_compilation_error', 'expression must respond_to #call')
+      callables << fn
+      respond(true)
     end
   when "map_doc"
     results = []
     doc = cmd[1]
     doc.freeze
-    $callables.each do |callable|
-      $map_results = []
+    callables.each do |callable|
+      map_results.clear
       begin
         callable.call(doc)
-        results.push($map_results)
+        results.push(map_results)
       rescue => e
-        return_error('map_runtime_error', "exception raised: #{e}")
+        log "function raised exception (#{e}) with doc._id #{doc['_id']}"
+        results.push([])
+      rescue Exception => e
+        respond_error('map_runtime_error', "exception raised: #{e}")
         exit(1)
       end
     end
-    puts JSON.unparse(results)
-    STDOUT.flush
+    respond(results)
+  when "reduce"
+    # Done like this for compatibility with the Javascript view server.
+    # In some cases it means the reduce and rereduce functions can be
+    # identical. Otherwise: reduce function could each { |(k,id),v| ... }
+    ks = cmd[2].collect { |kid,v| kid }
+    vs = cmd[2].collect { |kid,v| v }
+    run_reduce(cmd[1], ks, vs, false, binding)
+  when "rereduce"
+    run_reduce(cmd[1], nil, cmd[2], true, binding)
   else
-    return_error('query_server_error', "unknown command '#{cmd[0]}'")
+    respond_error('query_server_error', "unknown command '#{cmd[0]}'")
     exit(1)
   end
 end
+
+#rescue Exception => e
+#  File.open("/tmp/couchdb_view.log","a") { |f| f << "#{e}\n\t#{e.backtrace.join("\n\t")}" }
+#end

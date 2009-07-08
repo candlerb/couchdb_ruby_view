@@ -1,0 +1,7 @@
+*~
+*.orig
+doc/rdoc
+coverage
+.svn
+.irbrc
+hold

@@ -1,0 +1,38 @@
+Installation
+------------
+Copy bin/couchdb_ruby_view to somewhere like /usr/local/bin, and make
+sure it is executable.
+
+Edit /usr/local/etc/couchdb/local.ini and set:
+
+[query_servers]
+ruby = /usr/local/bin/couchdb_ruby_view
+
+Restart couchdb.
+
+API
+---
+map:
+
+  proc { |doc|
+    ...
+    emit(key,val)
+    ...
+  }
+
+reduce/rereduce:
+
+  proc { |ks,vs,rereduce|
+    vs.inject(0) { |a,b| a+b }
+  }
+
+Note that CouchDB actually passes objects which could be iterated directly
+using { |(k,id),v| ... }. However I've split these into separate arrays of
+[k,id] and v for consistency with the Javascript view server, and because it
+simplifies some reduce/rereduce functions (as in the example above, where
+both reduce and rereduce are the same)
+
+Authors
+-------
+Johan Sørensen <johan@johansorensen.com>
+Brian Candler <B.Candler@pobox.com>
