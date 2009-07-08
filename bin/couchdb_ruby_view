@@ -1,0 +1,95 @@
+#!/usr/bin/env ruby -wKU
+
+require 'rubygems'
+require 'json'
+
+# Highly experimental view requestor for CouchDb
+# 
+# >> pp db.post("_temp_view", "proc{|doc| if doc['foo'] =~ /ba/; return [null, doc];end  }")
+# #<CouchObject::Response:0x616944
+#  @parsed_body=
+#   {"rows"=>
+#     [{"_rev"=>928806717,
+#       "_id"=>"28D568C5992CBD2B4711F57225A19517",
+#       "value"=>
+#        {"_id"=>"28D568C5992CBD2B4711F57225A19517",
+#         "_rev"=>928806717,
+#         "foo"=>"baz"}},
+#      {"_rev"=>-1696868121,
+#       "_id"=>"601D858DB2E298EFC4BBA92A11760D1E",
+#       "value"=>
+#        {"_id"=>"601D858DB2E298EFC4BBA92A11760D1E",
+#         "_rev"=>-1696868121,
+#         "foo"=>"bar"}},
+#      {"_rev"=>-2093091288,
+#       "_id"=>"CABCEB3F2C8B70B3FE24A03FF6AB7A1E",
+#       "value"=>
+#        {"_id"=>"CABCEB3F2C8B70B3FE24A03FF6AB7A1E",
+#         "_rev"=>-2093091288,
+#         "foo"=>"bar"}}],
+#    "offset"=>0,
+#    "total_rows"=>3,
+#    "view"=>"_temp_view:proc{|doc| if doc['foo'] =~ /ba/; return [null,doc];end  }"},
+#  @response=#<Net::HTTPOK 200 OK readbody=true>>
+
+$callables = []
+$map_results = []
+
+# used within the provided proc to add keys/values to the resulting view
+def map(key, value)
+  unless key.nil? && value.nil?
+    $map_results.push([key, value])
+  end
+end
+
+def return_error(label, reason)
+  error = { 'error' => { 'id' => label, 'reason' => reason } }
+  puts JSON.unparse(error)
+  STDOUT.flush
+end
+
+while cmd = ARGF.gets
+  #$stderr.puts "@@@==> got: #{cmd.inspect}"
+  cmd = JSON.parse(cmd)
+  case cmd[0]
+  when "reset"
+    $callables = []
+    puts "true"
+    STDOUT.flush
+  when "add_fun"
+    # second arg is a string that will compile to a function
+    begin
+      callable = eval(cmd[1])
+    rescue => e
+      return_error('map_compilation_error', "expression not evalable: #{e}")
+      exit(1)
+    end
+    
+    if callable.respond_to?(:call)
+      $callables << callable
+      puts "true"
+      STDOUT.flush
+    else
+      return_error('map_compilation_error', 'expression must respond_to #call')
+    end
+  when "map_doc"
+    results = []
+    doc = cmd[1]
+    doc.freeze
+    $callables.each do |callable|
+      $map_results = []
+      begin
+        callable.call(doc)
+        results.push($map_results)
+      rescue => e
+        return_error('map_runtime_error', "exception raised: #{e}")
+        exit(1)
+      end
+    end
+    puts JSON.unparse(results)
+    STDOUT.flush
+  else
+    return_error('query_server_error', "unknown command '#{cmd[0]}'")
+    exit(1)
+  end
+end
