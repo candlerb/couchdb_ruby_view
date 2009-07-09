@@ -8,6 +8,10 @@ Edit /usr/local/etc/couchdb/local.ini and set:
 [query_servers]
 ruby = /usr/local/bin/couchdb_ruby_view
 
+or
+
+ruby = /path/to/ruby /usr/local/bin/couchdb_ruby_view
+
 Restart couchdb.
 
 API
@@ -31,6 +35,21 @@ using { |(k,id),v| ... }. However I've split these into separate arrays of
 [k,id] and v for consistency with the Javascript view server, and because it
 simplifies some reduce/rereduce functions (as in the example above, where
 both reduce and rereduce are the same)
+
+*** IMPORTANT SECURITY WARNING ***
+----------------------------------
+DON'T USE THIS CODE IF UNTRUSTED USERS HAVE DIRECT ACCESS TO YOUR DATABASE!
+They will be able to run *any* code or read/write *any* file as the couchdb
+user if they can post to _temp_view or update design documents.
+
+Not sure how to fix this. $SAFE >= 3 prevents users calling system(),
+File.read() etc with their own arguments, but also prevents eval() from
+compiling their function.
+
+ALSO TODO
+---------
+If map/reduce functions define helper methods using 'def', they should do
+this inside a singleton class rather than globally.
 
 Authors
 -------
