@@ -86,7 +86,7 @@ while cmd = ARGF.gets
     doc = cmd[1]
     doc.freeze
     callables.each do |callable|
-      map_results.clear
+      map_results = []
       begin
         callable.call(doc)
         results.push(map_results)
