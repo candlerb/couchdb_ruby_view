@@ -15,7 +15,7 @@
 # spec test/query_server_spec.rb -f specdoc --color
 
 COUCH_ROOT = "#{File.dirname(__FILE__)}/.." unless defined?(COUCH_ROOT)
-LANGUAGE = "js"
+LANGUAGE = "ruby"
 
 
 require 'open3'
@@ -95,7 +95,10 @@ end
 
 class QueryServerRunner < OSProcessRunner
 
-  COMMANDS = {"js" => "#{COUCH_ROOT}/src/couchdb/couchjs #{COUCH_ROOT}/share/server/main.js" }
+  COMMANDS = {
+    "js" => "#{COUCH_ROOT}/src/couchdb/couchjs #{COUCH_ROOT}/share/server/main.js",
+    "ruby" => "#{COUCH_ROOT}/bin/couchdb_ruby_view",
+  }
 
   def self.run_command
     COMMANDS[LANGUAGE]
@@ -110,22 +113,26 @@ end
 
 functions = {
   "emit-twice" => {
-    "js" => %{function(doc){emit("foo",doc.a); emit("bar",doc.a)}}
+    "js" => %{function(doc){emit("foo",doc.a); emit("bar",doc.a)}},
+    "ruby" => %{proc {|doc| emit("foo",doc["a"]); emit("bar",doc["a"])}},
   },
   "emit-once" => {
-    "js" => %{function(doc){emit("baz",doc.a)}}
+    "js" => %{function(doc){emit("baz",doc.a)}},
+    "ruby" => %{proc {|doc| emit("baz",doc["a"])}},
   },
   "reduce-values-length" => {
-    "js" => %{function(keys, values, rereduce) { return values.length; }}
+    "js" => %{function(keys, values, rereduce) { return values.length; }},
+    "ruby" => %{proc {|keys, values, rereduce| values.length}},
   },
   "reduce-values-sum" => {
-    "js" => %{function(keys, values, rereduce) { return sum(values); }}
+    "js" => %{function(keys, values, rereduce) { return sum(values); }},
+    "ruby" => %{proc {|keys, values, rereduce| values.inject(0) {|a,b| a+b}}},
   },
   "validate-forbidden" => {
-    "js" => %{function(newDoc, oldDoc, userCtx) { if (newDoc.bad) throw({forbidden:"bad doc"}); "foo bar";}}
+    "js" => %{function(newDoc, oldDoc, userCtx) { if (newDoc.bad) throw({forbidden:"bad doc"}); "foo bar";}},
   },
   "show-simple" => {
-    "js" => <<-JS
+    "js" => <<-JS,
         function(doc, req) {
           log("ok");
           return [doc.title, doc.body].join(' - ');
@@ -133,7 +140,7 @@ functions = {
     JS
   },
   "show-headers" => {
-    "js" => <<-JS
+    "js" => <<-JS,
         function(doc, req) {
           var resp = {"code":200, "headers":{"X-Plankton":"Rusty"}};
           resp.body = [doc.title, doc.body].join(' - ');
@@ -142,7 +149,7 @@ functions = {
      JS
   },
   "show-sends" => {
-    "js" =>  <<-JS
+    "js" =>  <<-JS,
         function(head, req) {
           start({headers:{"Content-Type" : "text/plain"}});
           send("first chunk");
@@ -152,7 +159,7 @@ functions = {
     JS
   },
   "show-while-get-rows" => {
-    "js" =>  <<-JS
+    "js" =>  <<-JS,
         function(head, req) {
           send("first chunk");
           send(req.q);
@@ -166,7 +173,7 @@ functions = {
     JS
   },
   "show-while-get-rows-multi-send" => {
-    "js" => <<-JS
+    "js" => <<-JS,
         function(head, req) {
           send("bacon");
           var row;
@@ -180,7 +187,7 @@ functions = {
     JS
   },
   "list-simple" => {
-    "js" => <<-JS
+    "js" => <<-JS,
         function(head, req) {
           send("first chunk");
           send(req.q);
@@ -193,7 +200,7 @@ functions = {
     JS
   },
   "list-chunky" => {
-    "js" => <<-JS
+    "js" => <<-JS,
         function(head, req) {
           send("first chunk");
           send(req.q);
@@ -209,14 +216,14 @@ functions = {
     JS
   },
   "list-old-style" => {
-    "js" => <<-JS
+    "js" => <<-JS,
         function(head, req, foo, bar) {
           return "stuff";
         }
     JS
   },
   "list-capped" => {
-    "js" => <<-JS
+    "js" => <<-JS,
         function(head, req) {
           send("bacon")
           var row, i = 0;
@@ -231,7 +238,7 @@ functions = {
     JS
   },
   "list-raw" => {
-    "js" => <<-JS
+    "js" => <<-JS,
         function(head, req) {
           send("first chunk");
           send(req.q);
@@ -242,7 +249,7 @@ functions = {
           return "tail";
         };
     JS
-  }
+  },
 }
 
 describe "query server normal case" do
