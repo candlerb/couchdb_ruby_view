@@ -103,8 +103,7 @@ while cmd = ARGF.gets
     # Done like this for compatibility with the Javascript view server.
     # In some cases it means the reduce and rereduce functions can be
     # identical. Otherwise: reduce function could each { |(k,id),v| ... }
-    ks = cmd[2].collect { |kid,v| kid }
-    vs = cmd[2].collect { |kid,v| v }
+    ks, vs = cmd[2].transpose
     run_reduce(cmd[1], ks, vs, false, binding)
   when "rereduce"
     run_reduce(cmd[1], nil, cmd[2], true, binding)
