@@ -42,9 +42,9 @@ DON'T USE THIS CODE IF UNTRUSTED USERS HAVE DIRECT ACCESS TO YOUR DATABASE!
 They will be able to run *any* code or read/write *any* file as the couchdb
 user if they can post to _temp_view or update design documents.
 
-Not sure how to fix this. $SAFE >= 3 prevents users calling system(),
-File.read() etc with their own arguments, but also prevents eval() from
-compiling their function.
+TODO: improve this by compiling and running the functions in a separate
+thread with $SAFE=4.  There is also _why's ruby sandbox gem, although this
+requires a small patch to the ruby interpreter itself.
 
 ALSO TODO
 ---------
