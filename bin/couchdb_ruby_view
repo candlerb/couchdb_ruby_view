@@ -29,9 +29,10 @@ def log(message)
 end
 
 def respond(obj)
-  puts JSON.unparse(obj)
+  puts obj.to_json
 rescue => e
-  puts JSON.unparse(["log", "Error converting object to JSON: #{e}"])
+  puts ["log", "Error converting object #{obj.inspect} to JSON: #{e}"].to_json
+  puts "false"
 ensure
   STDOUT.flush
 end

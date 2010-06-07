@@ -14,7 +14,7 @@
 # to run (requires ruby and rspec):
 # spec test/query_server_spec.rb -f specdoc --color
 
-COUCH_ROOT = "#{File.dirname(__FILE__)}/.." unless defined?(COUCH_ROOT)
+COUCH_ROOT = ENV['COUCH_ROOT'] || "#{File.dirname(__FILE__)}/.." unless defined?(COUCH_ROOT)
 LANGUAGE = "ruby"
 
 
@@ -82,7 +82,7 @@ class OSProcessRunner
       if rj.respond_to?(:[]) && rj.is_a?(Array)
         if rj[0] == "log"
           log = rj[1]
-          puts "log: #{log}" if @trace
+          puts "log: #{log}"
           rj = jsgets
         end
       end
