@@ -2,7 +2,11 @@
 
 #begin
 require 'rubygems'
-require 'json'
+begin
+  require "yajl/json_gem"
+rescue LoadError
+  require "json"
+end
 
 # Highly experimental view requestor for CouchDb
 # 

@@ -20,7 +20,11 @@ LANGUAGE = "ruby"
 
 require 'open3'
 require 'spec'
-require 'json'
+begin
+  require "yajl/json_gem"
+rescue LoadError
+  require "json"
+end
 
 
 class OSProcessRunner
